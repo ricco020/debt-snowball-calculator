@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debt snowball vs avalanche calculator (free, CSV for Excel or Google Sheets)</title>
+<meta name="description" content="Free debt snowball calculator: enter your debts, APR and minimum payments, see your debt-free date and total interest for the snowball and the avalanche side by side, with the month-by-month plan exportable to Excel or Google Sheets (CSV). Runs in your browser, nothing is sent.">
+<style>
+:root{--ink:#1d1a24;--paper:#f3efe6;--navy:#23395b;--rust:#b2542b;--rule:#d8d0bd}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.6 Georgia,"Iowan Old Style",serif}
+main{max-width:800px;margin:0 auto;padding:36px 18px 60px}
+h1{font-size:1.9rem;line-height:1.15;margin:0 0 .4em;color:var(--navy)}
+h2{font-size:1.2rem;margin:1.8em 0 .5em;color:var(--navy)}
+a{color:var(--navy)}
+.box{background:#fff;border:1px solid var(--rule);border-radius:8px;padding:14px}
+.debt{display:grid;grid-template-columns:2fr 1.3fr 1fr 1.2fr 34px;gap:8px;margin-bottom:8px;align-items:end}
+.debt label,.row label{font-size:.85rem;display:flex;flex-direction:column;gap:3px;min-width:0}
+input,select{font:inherit;padding:7px;border:1px solid var(--rule);border-radius:5px;background:#fff;width:100%;min-width:0}
+.x{font:inherit;border:1px solid var(--rule);background:#fff;border-radius:5px;height:40px;cursor:pointer;color:var(--rust)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:10px}
+button.add,.dl button{font:inherit;font-weight:bold;padding:9px 14px;border:2px solid var(--navy);border-radius:6px;background:#fff;color:var(--navy);cursor:pointer}
+.dl{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.dl button.main{background:var(--navy);color:#fff}
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0}
+.cmp div{background:#fff;border-top:4px solid var(--rust);padding:10px 14px;border-radius:4px}
+.cmp b{display:block;font-size:1.25rem;color:var(--navy)}
+.warn{background:#fbe9e1;border-left:4px solid var(--rust);padding:8px 12px;border-radius:4px}
+.wrap{overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid var(--rule);border-radius:6px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{border-bottom:1px solid var(--rule);padding:6px 8px;text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:#fff;color:var(--navy)}
+td:first-child,th:first-child{text-align:left}
+tr.paid td{background:#eef3f8}
+small{color:#5f5a66}
+@media(max-width:560px){.debt{grid-template-columns:1fr 1fr}.debt label:first-child{grid-column:1/-1}.x{grid-column:2}}
+</style>
+</head>
+<body>
+<main>
+<h1>Debt snowball vs avalanche calculator</h1>
+<p>List what you owe, add the extra you can pay each month, and see both methods side by side: the date you are debt-free, the interest you pay in total, and the month each debt disappears. The full monthly plan downloads as a CSV that opens in Excel or Google Sheets.</p>
+<div class="box">
+<div id="debts"></div>
+<button class="add" type="button" id="add">+ Add a debt</button>
+<div class="row">
+<label>Extra each month on top of minimums ($)<input type="number" id="extra" value="200" min="0" step="10"></label>
+<label>First payment month<input type="month" id="start"></label>
+<label>Plan shown below<select id="show"><option value="snow">Snowball (smallest balance first)</option><option value="ava">Avalanche (highest APR first)</option></select></label>
+</div>
+</div>
+<div id="out"></div>
+<div class="dl"><button class="main" type="button" id="csv">Download the monthly plan (CSV)</button></div>
+<div class="wrap"><table id="t"></table></div>
+<h2>How the numbers are worked out</h2>
+<p>Each month, interest is added to every balance at APR / 12. Every debt receives its minimum payment. Your extra, plus the minimum of every debt already paid off (the "snowball"), goes to the target debt: the smallest balance for the snowball, the highest APR for the avalanche. When the target is cleared mid-month, the leftover rolls straight to the next one. The total you pay each month never changes, which is what makes the method work.</p>
+<h2>Snowball or avalanche?</h2>
+<p>The avalanche always costs the same or less interest, and the box above shows by how much in your case. The snowball clears a first debt sooner, which is the reason many people stick with it. If the gap shown is small, take the snowball. If it is large, the avalanche pays you to be patient.</p>
+<h2>Limits</h2>
+<p><small>Fixed APR, payments at the start of each month, no new charges, no fees and no promotional 0% periods. Card issuers compound daily, so the real interest is a little higher. If a minimum payment does not cover a debt's monthly interest, the calculator says so. Nothing you type leaves this page.</small></p>
+<h2>Keep it on paper</h2>
+<p>To track the plan by hand (balances crossed off month by month, a payoff thermometer per debt), there is a <a href="https://tidysheets.shop/p/debt-snowball-tracker">printable debt snowball tracker</a>.</p>
+<p><small>Open source, MIT licence. Single HTML file, no tracking, no network calls.</small></p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const money=v=>'$'+v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const sample=[["Medical bill",900,0,40],["Store card",1800,19.9,55],["Credit card",6400,27.4,190],["Car loan",9800,7.9,265]];
+function row(d){const w=document.createElement('div');w.className='debt';
+w.innerHTML=`<label>Debt<input class="n" value="${d[0]}"></label><label>Balance ($)<input class="b" type="number" min="0" step="1" value="${d[1]}"></label><label>APR (%)<input class="r" type="number" min="0" step="0.1" value="${d[2]}"></label><label>Minimum ($)<input class="m" type="number" min="0" step="1" value="${d[3]}"></label><button class="x" type="button" aria-label="Remove">x</button>`;
+w.querySelector('.x').onclick=()=>{w.remove();run()};w.querySelectorAll('input').forEach(i=>i.oninput=run);$('debts').appendChild(w)}
+function read(){return[...document.querySelectorAll('.debt')].map((w,i)=>({i,name:w.querySelector('.n').value||('Debt '+(i+1)),bal:+w.querySelector('.b').value||0,apr:+w.querySelector('.r').value||0,min:+w.querySelector('.m').value||0})).filter(d=>d.bal>0)}
+function sim(debts,extra,method){
+ const d=debts.map(x=>({...x,paidMonth:null}));const budget=d.reduce((s,x)=>s+x.min,0)+extra;
+ const order=()=>d.filter(x=>x.bal>0.005).sort(method==='snow'?(a,b)=>a.bal-b.bal||b.apr-a.apr:(a,b)=>b.apr-a.apr||a.bal-b.bal);
+ let month=0,interest=0;const rows=[];
+ while(d.some(x=>x.bal>0.005)&&month<600){month++;let cash=budget;const pay=d.map(()=>0);
+  d.forEach((x,k)=>{if(x.bal>0.005){const it=x.bal*x.apr/1200;x.bal+=it;interest+=it}});
+  d.forEach((x,k)=>{if(x.bal>0.005){const p=Math.min(x.min,x.bal);x.bal-=p;pay[k]+=p;cash-=p}});
+  for(const x of order()){if(cash<=0.005)break;const p=Math.min(cash,x.bal);x.bal-=p;pay[x.i]+=p;cash-=p}
+  d.forEach(x=>{if(x.bal<=0.005&&x.paidMonth===null){x.bal=0;x.paidMonth=month}});
+  rows.push({month,pay:[...pay],bal:d.map(x=>x.bal)})}
+ return{months:month,interest,rows,debts:d,stuck:d.some(x=>x.bal>0.005)}}
+function label(m){const s=$('start').value.split('-');const dt=new Date(+s[0],+s[1]-1+m-1,1);return dt.toLocaleString('en-US',{month:'short',year:'numeric'})}
+let last=null;
+function run(){const debts=read(),extra=Math.max(0,+$('extra').value||0);
+ if(!debts.length){$('out').innerHTML='';$('t').innerHTML='';last=null;return}
+ const S=sim(debts,extra,'snow'),A=sim(debts,extra,'ava');
+ const low=debts.filter(x=>x.min<x.bal*x.apr/1200);
+ let h='';if(low.length)h+=`<p class="warn">The minimum on ${low.map(x=>x.name).join(', ')} is below its monthly interest. It only shrinks once the extra reaches it.</p>`;
+ const card=(t,r)=>r.stuck?`<div>${t}<b>Not paid off in 50 years</b><small>Raise the extra amount.</small></div>`:`<div>${t}<b>Debt-free ${label(r.months)}</b>${r.months} months, interest ${money(r.interest)}<br><small>First debt gone: ${r.debts.filter(x=>x.paidMonth).sort((a,b)=>a.paidMonth-b.paidMonth).map(x=>x.name+', '+label(x.paidMonth))[0]||'none'}</small></div>`;
+ h+=`<div class="cmp">${card('Snowball',S)}${card('Avalanche',A)}</div>`;
+ if(!S.stuck&&!A.stuck)h+=`<p>Avalanche saves <b>${money(Math.max(0,S.interest-A.interest))}</b> of interest${A.months<S.months?' and '+(S.months-A.months)+' month(s)':''}. Monthly outlay in both plans: <b>${money(debts.reduce((s,x)=>s+x.min,0)+extra)}</b>.</p>`;
+ $('out').innerHTML=h;
+ const R=$('show').value==='snow'?S:A;last={R,debts};
+ let t='<tr><th>Month</th>'+debts.map(x=>`<th>${x.name} paid</th><th>left</th>`).join('')+'</tr>';
+ for(const r of R.rows){t+=`<tr${r.bal.some((b,k)=>b===0&&r.pay[k]>0&&R.debts[k].paidMonth===r.month)?' class="paid"':''}><td>${label(r.month)}</td>`+r.pay.map((p,k)=>`<td>${money(p)}</td><td>${money(r.bal[k])}</td>`).join('')+'</tr>'}
+ $('t').innerHTML=t}
+function csv(){if(!last)return;const{R,debts}=last;const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+ let c=['Month',...debts.flatMap(x=>[x.name+' paid',x.name+' balance'])].map(q).join(',')+'\r\n';
+ for(const r of R.rows)c+=[q(label(r.month)),...r.pay.flatMap((p,k)=>[p.toFixed(2),r.bal[k].toFixed(2)])].join(',')+'\r\n';
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/csv'}));a.download='debt-payoff-plan-'+$('show').value+'.csv';a.click()}
+const n=new Date();$('start').value=n.getFullYear()+'-'+String(n.getMonth()+2>12?1:n.getMonth()+2).padStart(2,'0');
+if(n.getMonth()===11)$('start').value=(n.getFullYear()+1)+'-01';
+sample.forEach(row);$('add').onclick=()=>{row(['',0,0,0]);run()};
+['extra','start','show'].forEach(id=>$(id).oninput=run);$('csv').onclick=csv;run();
+</script>
+</body>
+</html>
